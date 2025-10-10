@@ -1,0 +1,157 @@
+TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN' 
+API_BASE_URL = 'http://127.0.0.1:8000/reservations/api/'
+logging.basicConfig(...)
+* **What it does:** This section sets up the bot's essential variables.
+* **Why:**
+    * `TELEGRAM_BOT_TOKEN`: This is your bot's secret password. The script needs it to authenticate with Telegram's servers. **You must replace the placeholder with your real token.**
+    * `API_BASE_URL`: This defines the location of your data source. Keeping it as a variable makes it easy to change if your server's address changes later.
+    * `logging`: This is incredibly useful for development. When you run the bot, it will print status messages to your console, helping you see what it's doing and find errors easily.
+
+#### 2. Core Logic Functions
+These functions do the main work of fetching and formatting data. They don't interact with Telegram directly, which is good practice (separation of concerns).
+
+* **`fetch_reservation_data(query_date)`**
+    * **What it does:** It takes a date string (like `"2025-09-30"`), builds the full URL, and sends a GET request to your API.
+    * **Why:**
+        * It handles all the networking logic in one place.
+        * The `try...except` block is crucial for robustness. If your API server is down or there's a network issue, the bot won't crash. Instead, it will log the error and return `None`.
+        * `response.raise_for_status()` is a handy way to check if the request was successful (e.g., HTTP 200 OK). If not, it automatically raises an error that our `except` block can catch.
+
+* **`format_schedule_message(data, query_date)`**
+    * **What it does:** This function takes the raw JSON data from your API and transforms it into a clean, readable string with emojis for the user.
+    * **Why:** Your API sends data structured for computers (JSON). This function translates it for humans.
+        * It first checks if the data is empty and provides a friendly message.
+        * It loops through each court and then through each time slot within that court.
+        * It uses an `if/else` on the `is_available` flag to decide whether to show a green checkmark (✅) or a red cross (❌) and the reservation name. This makes the schedule very easy to scan.
+        * The `*.get('key', 'default_value')` pattern is a safe way to access dictionary keys. If a key (like `user` or `full_name`) is missing from the API response for some reason, the bot won't crash.
+
+#### 3. Telegram Handlers
+These functions are the bridge between Telegram and your core logic. They are defined as `async` because the `python-telegram-bot` library works asynchronously to handle many users at once.
+
+* **`start(update, context)`**
+    * **What it does:** This function runs whenever a user sends the `/start` command.
+    * **Why:** It's the entry point for new users.
+        * It calculates today's and tomorrow's dates.
+        * It creates the two "glass" buttons you wanted. These are called `InlineKeyboardButton`s.
+        * **Crucially**, the `callback_data` for each button is set to the actual date string (`'2025-10-08'`). This is the data that gets sent back to our bot when the button is clicked. It's an efficient way to pass information without the user having to type anything.
+        * It sends the welcome message and attaches the keyboard to it.
+
+* **`button_handler(update, context)`**
+    * **What it does:** This is triggered *only* when an inline button (like "Today" or "Tomorrow") is pressed.
+    * **Why:** It handles the main interactive feature.
+        * `query = update.callback_query`: It gets the data associated with the button press.
+        * `query_date = query.data`: It extracts the date string we stored in `callback_data` earlier.
+        * `query.edit_message_text(...)`: This is a great user experience feature. Instead of sending a *new* message, it **edits** the original welcome message to show the schedule. This keeps the chat clean.
+        * It then calls our core logic functions (`fetch_reservation_data` and `format_schedule_message`) to get the job done.
+
+* **`date_message_handler(update, context)`**
+    * **What it does:** This handles any plain text message that is *not* a command (like `/start`).
+    * **Why:** This allows users to manually query any date they want.
+        * It first tries to validate that the user's text is in the `YYYY-MM-DD` format.
+        * If the format is correct, it fetches and displays the data.
+        * If not, it politely tells the user the correct format to use.
+
+#### 4. The `main()` Function
+```python
+def main() -> None:
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    application.add_handler(...)
+    
+    application.run_polling()
+* **What it does:** This is the conductor of the orchestra. It sets up the bot and tells it which function to run for which type of message.
+* **Why:**
+    * `Application.builder()`: Creates the main bot application object.
+    * `application.add_handler()`: This is where you register your handlers.
+        * `CommandHandler("start", start)` tells the bot: "When you see the `/start` command, run the `start` function."
+        * `CallbackQueryHandler(button_handler)` tells the bot: "When any inline button is clicked, run the `button_handler` function."
+        * `MessageHandler(...)` tells the bot: "For any text message that isn't a command, run the `date_message_handler` function."
+    * `application.run_polling()`: This starts the bot. It will continuously "poll" Telegram's servers to check for new messages.
+
+### **Part 4: How to Run Your Bot**
+
+1.  Make sure your API server is running (`http://127.0.0.1:8000/reservations/api/`).
+2.  Fill in your `TELEGRAM_BOT_TOKEN` in the `tennis_bot.py` file.
+3.  Open a terminal, navigate to the folder where you saved the file, and run:
+    ```bash
+    python tennis_bot.py
+    4.  Open Telegram, find your bot, and send it the `/start` command!
+
+
+
+
+
+
+
+
+
+Of course! I've upgraded the bot to version 2.0.1, incorporating your new features. The setup message is now more dynamic and can be paired with a video, making it much more engaging for your group members.
+
+Here is the updated code, followed by a full guide on how to use the new video feature.
+
+Explanation and Guide for Version 2.0.1
+What Changed in the Code?
+Dynamic Date in Welcome Message:
+
+Inside the setup_group function, the bot now gets the current date and converts it to a formatted Persian string (e.g., پنجشنبه ۱۷ مهر ۱۴۰۴).
+
+This date string is automatically inserted into the welcome message headline, showing users that the information is fresh for that day.
+
+Video Sending Capability:
+
+I've added a new configuration variable at the top of the script: GROUP_VIDEO_FILE_ID.
+
+The setup_group function now uses context.bot.send_video instead of reply_text. It sends the video specified by the file_id and attaches your welcome message as the caption.
+
+If you leave the GROUP_VIDEO_FILE_ID as its default value, the bot will safely fall back to sending a text-only message.
+
+Command Cleanup:
+
+After the admin uses the /setupgroup command, the bot will now automatically delete the command message itself, keeping the chat history clean and tidy.
+
+GUIDE: How to Add Your Video to the Bot
+To attach a video, you need its file_id. This is Telegram's internal reference to a file that's already on its servers. Using a file_id is the best method because it's extremely fast and saves you from re-uploading the video every time.
+
+Here is the easiest way to get the file_id:
+
+Step 1: Send the Video to Your Bot
+
+Open a private chat with your bot (ArsestennisRobot).
+
+Send it the video file you want to use for the daily welcome message.
+
+Step 2: Get a Bot to Reveal the file_id
+
+Forward the video you just sent from your bot's chat to another special bot called @JsonDumpBot.
+
+@JsonDumpBot will immediately reply with a block of technical data (in JSON format).
+
+Step 3: Find and Copy the file_id
+
+Look inside the JSON data for the video section. You will see a key named "file_id".
+
+It will have a long, complicated-looking string of letters, numbers, and symbols as its value.
+
+Copy this entire string.
+
+Step 4: Update Your Bot's Code
+
+Open your tennis_bot.py file.
+
+Find this line at the top:
+
+Python
+
+GROUP_VIDEO_FILE_ID = 'YOUR_VIDEO_FILE_ID_HERE'
+* **Replace** `'YOUR_VIDEO_FILE_ID_HERE'` with the `file_id` you just copied. Make sure it stays inside the quotes.
+
+Example:
+
+Python
+
+GROUP_VIDEO_FILE_ID = 'BAACAgIAAxkBAAIEAmY1_ABCDEF123456GHIJKLmnOPqrst...'
+
+**Step 5: Restart and Use!**
+* Save the `tennis_bot.py` file.
+* Stop your bot if it's running (usually by pressing `Ctrl+C` in the terminal) and restart it with `python tennis_bot.py`.
+* Now, when an admin goes to the group and types `/setupgroup`, the bot will post your video with the daily welcome message and buttons attached!
