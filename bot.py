@@ -1,15 +1,19 @@
 import logging
 import requests
 import jdatetime
+import os
+from dotenv import load_dotenv
 from datetime import date, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatType
-# ---- Version : 2.1.0 : Removed the proxy feature for a cleaner codebase.
+# ---- Version : 2.1.1 : Implemented environment variables for security.
 
+# --- Load Environment Variables ---
+load_dotenv()
 
 # --- CONFIGURATION ---
-TELEGRAM_BOT_TOKEN = '8318061590:AAGJYmTd8pZVN8RAGVOZCbRnY_Ms_iAb9QU'
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 API_BASE_URL = 'http://arsestennis.ir/reservations/api/'
 
 GROUP_MESSAGE_VISIBILITY_DURATION = 30 
@@ -229,6 +233,11 @@ async def date_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 # --- MAIN APPLICATION SETUP ---
 def main() -> None:
     """Starts the Telegram bot and registers all handlers."""
+    # --- Check for Token ---
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("FATAL: TELEGRAM_BOT_TOKEN not found in environment variables.")
+        return
+
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -236,9 +245,10 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, date_message_handler))
 
-    logger.info("Starting bot v2.1.0...")
+    logger.info("Starting bot v2.2.0...")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
+
 
