@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatType
-# ---- Version : 2.1.1 : Implemented environment variables for security.
+# ---- Version : 2.1.3 : Added multiple contact numbers and polished the group message.
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -15,6 +15,12 @@ load_dotenv()
 # --- CONFIGURATION ---
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 API_BASE_URL = 'http://arsestennis.ir/reservations/api/'
+
+# --- NEW CONTACT VARIABLES ---
+MANAGER_NAME = "مدیریت (آقای عابد)"
+MANAGER_PHONE = "09155518828"
+STAFF_NAME = "مسئول مجموعه (آقای جوادی)"
+STAFF_PHONE = "09306437158"
 
 GROUP_MESSAGE_VISIBILITY_DURATION = 30 
 GROUP_VIDEO_FILE_ID = 'YOUR_VIDEO_FILE_ID_HERE' 
@@ -57,9 +63,12 @@ def fetch_reservation_data(query_date: str) -> list | None:
     api_url = f"{API_BASE_URL}?date={query_date}"
     logger.info(f"Requesting data from: {api_url}")
     
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
     try:
-        # Removed proxy logic. This is now a direct connection.
-        response = requests.get(api_url, timeout=15)
+        response = requests.get(api_url, timeout=15, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -78,7 +87,6 @@ def format_schedule_message(data: list, query_date: str, is_group_message: bool 
         persian_date_str = query_date
     
     if not data:
-        # This message will also be sent as a temporary message in groups.
         return f"😕 متاسفانه اطلاعاتی برای تاریخ {persian_date_str} پیدا نشد."
 
     message = f"📅 **برنامه رزرواسیون برای {persian_date_str}**\n\n"
@@ -144,13 +152,16 @@ async def setup_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     today_jalali = jdatetime.date.fromgregorian(date=today_gregorian)
     today_persian_str = today_jalali.strftime("%A %d %B %Y")
 
+    # --- UPDATED GROUP MESSAGE ---
     group_welcome_message = (
-        f"🎾 **به گروه آکادمی تنیس آرسس خوش آمدید! (بروزرسانی {today_persian_str})**\n\n"
-        "در این گروه می‌توانید از آخرین وضعیت سانس‌های خالی مطلع شوید. برای دسترسی سریع، لینک‌های زیر را دنبال کنید:\n\n"
-        "🌐 **وب‌سایت آکادمی:** [arsestennis.ir](http://arsestennis.ir)\n"
-        "📅 **بخش رزرواسیون آنلاین:** [arsestennis.ir/reservations](http://arsestennis.ir/reservations)\n"
-        "📞 **تماس با مدیریت:** [09123456789](tel:+989123456789)\n\n"
-        "👇 برای مشاهده سانس‌های آزاد **امروز** و **فردا**، روی دکمه‌های زیر کلیک کنید. پیشنهاد می‌شود این پیام را در گروه پین کنید."
+        f"🎾 **آکادمی تنیس آرسس (بروزرسانی {today_persian_str})**\n\n"
+        "برای اطلاع از آخرین وضعیت سانس‌های خالی و دسترسی سریع، از لینک‌های زیر استفاده کنید:\n\n"
+        "🌐 **وب‌سایت:** [arsestennis.ir](http://arsestennis.ir)\n"
+        "📅 **رزرو آنلاین:** [arsestennis.ir/reservations/reserve-for-today](http://arsestennis.ir/reservations/reserve-for-today/)\n\n"
+        "📞 **تماس جهت هماهنگی:**\n"
+        f"▪️ **{STAFF_NAME}:** [{STAFF_PHONE}](tel:+98{STAFF_PHONE[1:]})\n"
+        f"▪️ **{MANAGER_NAME}:** [{MANAGER_PHONE}](tel:+98{MANAGER_PHONE[1:]})\n\n"
+        "👇 برای مشاهده سانس‌های آزاد **امروز** و **فردا**، روی دکمه‌های زیر کلیک کنید."
     )
     
     reply_markup = create_date_keyboard()
@@ -193,7 +204,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif chat_type in [ChatType.GROUP, ChatType.SUPERGROUP]:
         reservation_data = fetch_reservation_data(query_date)
-        # This function returns the "no data found" message if needed, and the deletion warning is added.
         message_text = format_schedule_message(reservation_data, query_date, is_group_message=True)
         
         sent_message = await context.bot.send_message(
@@ -202,7 +212,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode='Markdown'
         )
         
-        # This job will run for BOTH "schedule" and "no data found" messages.
         context.job_queue.run_once(
             delete_message_job,
             GROUP_MESSAGE_VISIBILITY_DURATION,
@@ -233,7 +242,6 @@ async def date_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 # --- MAIN APPLICATION SETUP ---
 def main() -> None:
     """Starts the Telegram bot and registers all handlers."""
-    # --- Check for Token ---
     if not TELEGRAM_BOT_TOKEN:
         logger.error("FATAL: TELEGRAM_BOT_TOKEN not found in environment variables.")
         return
@@ -245,10 +253,9 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, date_message_handler))
 
-    logger.info("Starting bot v2.2.0...")
+    logger.info("Starting bot v2.1.3...")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
-
 
