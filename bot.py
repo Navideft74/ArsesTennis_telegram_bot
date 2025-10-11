@@ -5,14 +5,14 @@ from datetime import date, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatType
+# ---- Version : 2.1.0 : Removed the proxy feature for a cleaner codebase.
+
 
 # --- CONFIGURATION ---
 TELEGRAM_BOT_TOKEN = '8318061590:AAGJYmTd8pZVN8RAGVOZCbRnY_Ms_iAb9QU'
-API_BASE_URL = 'http://127.0.0.1:8000/reservations/api/'
+API_BASE_URL = 'http://arsestennis.ir/reservations/api/'
+
 GROUP_MESSAGE_VISIBILITY_DURATION = 30 
-# --- NEW ---
-# The File ID of the video you want to send with the /setupgroup command.
-# See the guide below the code on how to get this ID.
 GROUP_VIDEO_FILE_ID = 'YOUR_VIDEO_FILE_ID_HERE' 
 
 
@@ -47,13 +47,15 @@ def create_date_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([buttons])
 
 
-# --- CORE LOGIC (UNCHANGED) ---
+# --- CORE LOGIC ---
 def fetch_reservation_data(query_date: str) -> list | None:
     """Fetches reservation data from your API for a specific date."""
     api_url = f"{API_BASE_URL}?date={query_date}"
     logger.info(f"Requesting data from: {api_url}")
+    
     try:
-        response = requests.get(api_url, timeout=10)
+        # Removed proxy logic. This is now a direct connection.
+        response = requests.get(api_url, timeout=15)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -72,6 +74,7 @@ def format_schedule_message(data: list, query_date: str, is_group_message: bool 
         persian_date_str = query_date
     
     if not data:
+        # This message will also be sent as a temporary message in groups.
         return f"😕 متاسفانه اطلاعاتی برای تاریخ {persian_date_str} پیدا نشد."
 
     message = f"📅 **برنامه رزرواسیون برای {persian_date_str}**\n\n"
@@ -109,11 +112,11 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Failed to delete message: {e}")
 
 
-# --- TELEGRAM HANDLERS (UPDATED & NEW) ---
+# --- TELEGRAM HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler for /start. Works only in private chats."""
     if update.effective_chat.type != ChatType.PRIVATE:
-        return # Do nothing in groups
+        return 
     
     reply_markup = create_date_keyboard()
     welcome_message = "به ربات رزرو تنیس آرسس خوش آمدید! 🎾\n\nلطفا برای مشاهده برنامه، یکی از روزهای زیر را انتخاب کنید:"
@@ -133,25 +136,21 @@ async def setup_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("فقط ادمین گروه می‌تواند از این دستور استفاده کند.")
         return
         
-    # --- DYNAMIC DATE GENERATION ---
     today_gregorian = date.today()
     today_jalali = jdatetime.date.fromgregorian(date=today_gregorian)
     today_persian_str = today_jalali.strftime("%A %d %B %Y")
 
-    # Polished welcome message with today's date
     group_welcome_message = (
         f"🎾 **به گروه آکادمی تنیس آرسس خوش آمدید! (بروزرسانی {today_persian_str})**\n\n"
         "در این گروه می‌توانید از آخرین وضعیت سانس‌های خالی مطلع شوید. برای دسترسی سریع، لینک‌های زیر را دنبال کنید:\n\n"
-        "🌐 **وب‌سایت آکادمی:** [arsestennis.com](https://www.example.com)\n"
-        "📅 **بخش رزرواسیون آنلاین:** [لینک رزرو](https://www.example.com/reserve)\n"
+        "🌐 **وب‌سایت آکادمی:** [arsestennis.ir](http://arsestennis.ir)\n"
+        "📅 **بخش رزرواسیون آنلاین:** [arsestennis.ir/reservations](http://arsestennis.ir/reservations)\n"
         "📞 **تماس با مدیریت:** [09123456789](tel:+989123456789)\n\n"
         "👇 برای مشاهده سانس‌های آزاد **امروز** و **فردا**، روی دکمه‌های زیر کلیک کنید. پیشنهاد می‌شود این پیام را در گروه پین کنید."
     )
     
     reply_markup = create_date_keyboard()
     
-    # --- SEND VIDEO WITH CAPTION ---
-    # Check if a video ID has been set
     if GROUP_VIDEO_FILE_ID and GROUP_VIDEO_FILE_ID != 'YOUR_VIDEO_FILE_ID_HERE':
         await context.bot.send_video(
             chat_id=chat.id,
@@ -161,14 +160,12 @@ async def setup_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode='Markdown'
         )
     else:
-        # Fallback to sending text if no video ID is provided
         await update.message.reply_text(
             text=group_welcome_message,
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
     
-    # Delete the admin's original "/setupgroup" command to keep the chat clean
     await update.message.delete()
 
 
@@ -179,32 +176,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query_date = query.data
     chat_type = query.message.chat.type
 
-    # --- Private Chat Logic ---
     if chat_type == ChatType.PRIVATE:
         await query.edit_message_text(text=f"لطفا صبر کنید، در حال دریافت برنامه برای تاریخ {query_date}...")
         reservation_data = fetch_reservation_data(query_date)
         message_text = format_schedule_message(reservation_data, query_date)
         await query.edit_message_text(text=message_text, parse_mode='Markdown')
-        # Re-send the keyboard to maintain the loop
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="می‌توانید روز دیگری را انتخاب کنید:",
             reply_markup=create_date_keyboard()
         )
 
-    # --- Group Chat Logic ---
     elif chat_type in [ChatType.GROUP, ChatType.SUPERGROUP]:
         reservation_data = fetch_reservation_data(query_date)
+        # This function returns the "no data found" message if needed, and the deletion warning is added.
         message_text = format_schedule_message(reservation_data, query_date, is_group_message=True)
         
-        # Send a new, temporary message instead of editing the pinned one
         sent_message = await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=message_text,
             parse_mode='Markdown'
         )
         
-        # Schedule the message for deletion
+        # This job will run for BOTH "schedule" and "no data found" messages.
         context.job_queue.run_once(
             delete_message_job,
             GROUP_MESSAGE_VISIBILITY_DURATION,
@@ -215,7 +209,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def date_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles manual date entry. Works only in private chats to avoid group spam."""
     if update.effective_chat.type != ChatType.PRIVATE:
-        return # Ignore text messages in groups
+        return
 
     user_input_date = update.message.text
     try:
@@ -237,13 +231,12 @@ def main() -> None:
     """Starts the Telegram bot and registers all handlers."""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Handlers for private chat and general commands
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("setupgroup", setup_group)) # New admin command
-    application.add_handler(CallbackQueryHandler(button_handler)) # Universal button handler
+    application.add_handler(CommandHandler("setupgroup", setup_group))
+    application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, date_message_handler))
 
-    logger.info("Starting bot v2.0.1...")
+    logger.info("Starting bot v2.1.0...")
     application.run_polling()
 
 if __name__ == '__main__':
