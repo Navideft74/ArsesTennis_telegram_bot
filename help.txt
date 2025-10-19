@@ -1,157 +1,157 @@
-TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN' 
-API_BASE_URL = 'http://127.0.0.1:8000/reservations/api/'
-logging.basicConfig(...)
-* **What it does:** This section sets up the bot's essential variables.
-* **Why:**
-    * `TELEGRAM_BOT_TOKEN`: This is your bot's secret password. The script needs it to authenticate with Telegram's servers. **You must replace the placeholder with your real token.**
-    * `API_BASE_URL`: This defines the location of your data source. Keeping it as a variable makes it easy to change if your server's address changes later.
-    * `logging`: This is incredibly useful for development. When you run the bot, it will print status messages to your console, helping you see what it's doing and find errors easily.
+ArsesTennisRobot - Complete User & Admin Guide (V3.0.4)
 
-#### 2. Core Logic Functions
-These functions do the main work of fetching and formatting data. They don't interact with Telegram directly, which is good practice (separation of concerns).
+This guide provides a comprehensive overview of how to set up, manage, and use the ArsesTennisRobot.
 
-* **`fetch_reservation_data(query_date)`**
-    * **What it does:** It takes a date string (like `"2025-09-30"`), builds the full URL, and sends a GET request to your API.
-    * **Why:**
-        * It handles all the networking logic in one place.
-        * The `try...except` block is crucial for robustness. If your API server is down or there's a network issue, the bot won't crash. Instead, it will log the error and return `None`.
-        * `response.raise_for_status()` is a handy way to check if the request was successful (e.g., HTTP 200 OK). If not, it automatically raises an error that our `except` block can catch.
+Part 1: Admin Guide & Server Setup
 
-* **`format_schedule_message(data, query_date)`**
-    * **What it does:** This function takes the raw JSON data from your API and transforms it into a clean, readable string with emojis for the user.
-    * **Why:** Your API sends data structured for computers (JSON). This function translates it for humans.
-        * It first checks if the data is empty and provides a friendly message.
-        * It loops through each court and then through each time slot within that court.
-        * It uses an `if/else` on the `is_available` flag to decide whether to show a green checkmark (✅) or a red cross (❌) and the reservation name. This makes the schedule very easy to scan.
-        * The `*.get('key', 'default_value')` pattern is a safe way to access dictionary keys. If a key (like `user` or `full_name`) is missing from the API response for some reason, the bot won't crash.
+This section covers the one-time setup on your server and how to use the admin-specific features.
 
-#### 3. Telegram Handlers
-These functions are the bridge between Telegram and your core logic. They are defined as `async` because the `python-telegram-bot` library works asynchronously to handle many users at once.
+1.1. Initial Server Setup (cPanel Host)
 
-* **`start(update, context)`**
-    * **What it does:** This function runs whenever a user sends the `/start` command.
-    * **Why:** It's the entry point for new users.
-        * It calculates today's and tomorrow's dates.
-        * It creates the two "glass" buttons you wanted. These are called `InlineKeyboardButton`s.
-        * **Crucially**, the `callback_data` for each button is set to the actual date string (`'2025-10-08'`). This is the data that gets sent back to our bot when the button is clicked. It's an efficient way to pass information without the user having to type anything.
-        * It sends the welcome message and attaches the keyboard to it.
+Your bot is a "polling" bot, which means it needs to run continuously, 24/7. This guide explains how to achieve this on a standard cPanel host like PythonHost.ir.
 
-* **`button_handler(update, context)`**
-    * **What it does:** This is triggered *only* when an inline button (like "Today" or "Tomorrow") is pressed.
-    * **Why:** It handles the main interactive feature.
-        * `query = update.callback_query`: It gets the data associated with the button press.
-        * `query_date = query.data`: It extracts the date string we stored in `callback_data` earlier.
-        * `query.edit_message_text(...)`: This is a great user experience feature. Instead of sending a *new* message, it **edits** the original welcome message to show the schedule. This keeps the chat clean.
-        * It then calls our core logic functions (`fetch_reservation_data` and `format_schedule_message`) to get the job done.
+Step 1: Deploy Code from GitHub
 
-* **`date_message_handler(update, context)`**
-    * **What it does:** This handles any plain text message that is *not* a command (like `/start`).
-    * **Why:** This allows users to manually query any date they want.
-        * It first tries to validate that the user's text is in the `YYYY-MM-DD` format.
-        * If the format is correct, it fetches and displays the data.
-        * If not, it politely tells the user the correct format to use.
+In cPanel, go to Git™ Version Control.
 
-#### 4. The `main()` Function
-```python
-def main() -> None:
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    application.add_handler(...)
-    
-    application.run_polling()
-* **What it does:** This is the conductor of the orchestra. It sets up the bot and tells it which function to run for which type of message.
-* **Why:**
-    * `Application.builder()`: Creates the main bot application object.
-    * `application.add_handler()`: This is where you register your handlers.
-        * `CommandHandler("start", start)` tells the bot: "When you see the `/start` command, run the `start` function."
-        * `CallbackQueryHandler(button_handler)` tells the bot: "When any inline button is clicked, run the `button_handler` function."
-        * `MessageHandler(...)` tells the bot: "For any text message that isn't a command, run the `date_message_handler` function."
-    * `application.run_polling()`: This starts the bot. It will continuously "poll" Telegram's servers to check for new messages.
+Click Create and clone your repository using its HTTPS URL (e.g., https://github.com/Navideft74/ArsesTennis_telegram_bot.git).
 
-### **Part 4: How to Run Your Bot**
+Set the Repository Path to a folder name like ArsesTennis_telegram_bot.
 
-1.  Make sure your API server is running (`http://127.0.0.1:8000/reservations/api/`).
-2.  Fill in your `TELEGRAM_BOT_TOKEN` in the `tennis_bot.py` file.
-3.  Open a terminal, navigate to the folder where you saved the file, and run:
-    ```bash
-    python tennis_bot.py
-    4.  Open Telegram, find your bot, and send it the `/start` command!
+Step 2: Create the Python Environment (The Right Way)
+
+In cPanel, go to Setup Python App.
+
+Click Create Application.
+
+Set the Application root to the same folder name you used above (ArsesTennis_telegram_bot). Leave the URL blank. Click Create.
+
+The page will refresh. Find and copy the source command shown on the screen. It will look like: source /home/youruser/virtualenv/ArsesTennis_telegram_bot/3.9/bin/activate.
+
+Step 3: Install and Configure in the Terminal
+
+In cPanel, open the Terminal.
+
+Activate the environment by pasting the source command you just copied. Your prompt should now start with (ArsesTennis_telegram_bot).
+
+Navigate into your project folder: cd ~/ArsesTennis_telegram_bot
+
+Install all required libraries: pip install -r requirements.txt
+
+Create the environment file: nano .env
+
+Step 4: Configure the .env file
+This file stores all your secrets. Paste the following into the nano editor, replacing the placeholder values with your real data.
+
+# Your bot token from @BotFather
+TELEGRAM_BOT_TOKEN='12345:ABCDEFGHIJKL...'
+
+# A comma-separated list of Telegram User IDs for admins
+# To find your ID, message @userinfobot
+ADMIN_IDS='12345678,98765432'
+
+# (Optional) The file_id for your promotional video
+GROUP_VIDEO_FILE_ID='BAACAgIAAxkBAAIEAmY...'
 
 
+Press Ctrl+X, then Y, then Enter to save and exit.
+
+Step 5: Create the Self-Healing Cron Job
+This is the most critical step to keep your bot running.
+
+In cPanel, go to Cron Jobs.
+
+Under "Common Settings", choose "Once Per Five Minutes".
+
+In the "Command" box, paste the following command. Remember to replace ncgyhcay with your actual cPanel username.
+
+/usr/bin/flock -n /home/ncgyhcay/ArsesTennis_telegram_bot/bot.lock -c 'cd /home/ncgyhcay/ArsesTennis_telegram_bot && source /home/ncgyhcay/virtualenv/ArsesTennis_telegram_bot/3.9/bin/activate && python tennis_bot.py >> bot.log 2>&1'
 
 
+Click "Add New Cron Job".
 
+Your bot is now deployed and will run continuously, automatically restarting if it ever crashes.
 
+1.2. Adding the Sticky Promotional Video
 
+To make your group welcome message more engaging, you can attach a video.
 
+Get the file_id:
 
-Of course! I've upgraded the bot to version 2.0.1, incorporating your new features. The setup message is now more dynamic and can be paired with a video, making it much more engaging for your group members.
+In a private chat with your bot, send it the video file you want to use.
 
-Here is the updated code, followed by a full guide on how to use the new video feature.
+Immediately forward that video message to another bot called @JsonDumpBot.
 
-Explanation and Guide for Version 2.0.1
-What Changed in the Code?
-Dynamic Date in Welcome Message:
+@JsonDumpBot will reply with technical data. Find the video section and copy the long string of characters from the "file_id" field.
 
-Inside the setup_group function, the bot now gets the current date and converts it to a formatted Persian string (e.g., پنجشنبه ۱۷ مهر ۱۴۰۴).
+Add to .env file:
 
-This date string is automatically inserted into the welcome message headline, showing users that the information is fresh for that day.
+In the cPanel Terminal, navigate to your project folder and open the .env file with nano .env.
 
-Video Sending Capability:
+Add the GROUP_VIDEO_FILE_ID line from Step 4 above, pasting the file_id you copied.
 
-I've added a new configuration variable at the top of the script: GROUP_VIDEO_FILE_ID.
+Restart the Bot: To make the bot read the new setting, you need to restart it. The easiest way is to find and kill the running python process, and the cron job will restart it within 5 minutes.
 
-The setup_group function now uses context.bot.send_video instead of reply_text. It sends the video specified by the file_id and attaches your welcome message as the caption.
+In the Terminal, type ps aux | grep tennis_bot.py. Find the Process ID (PID).
 
-If you leave the GROUP_VIDEO_FILE_ID as its default value, the bot will safely fall back to sending a text-only message.
+Type kill <PID> to stop it.
 
-Command Cleanup:
+1.3. Managing the Bot in a Group
 
-After the admin uses the /setupgroup command, the bot will now automatically delete the command message itself, keeping the chat history clean and tidy.
+Initial Setup:
 
-GUIDE: How to Add Your Video to the Bot
-To attach a video, you need its file_id. This is Telegram's internal reference to a file that's already on its servers. Using a file_id is the best method because it's extremely fast and saves you from re-uploading the video every time.
+Add your bot to your Telegram group.
 
-Here is the easiest way to get the file_id:
+Promote the bot to an Admin. It is essential that you give it the "Delete Messages" permission. The bot needs this to delete the /setupgroup command after you use it.
 
-Step 1: Send the Video to Your Bot
+Type /setupgroup in the group. The bot will post two messages:
 
-Open a private chat with your bot (ArsestennisRobot).
+A welcome message (with your video if you configured it).
 
-Send it the video file you want to use for the daily welcome message.
+A schedule message that lists the timeslots.
 
-Step 2: Get a Bot to Reveal the file_id
+Pin the welcome message to the top of the group for all members to see.
 
-Forward the video you just sent from your bot's chat to another special bot called @JsonDumpBot.
+Functionality:
 
-@JsonDumpBot will immediately reply with a block of technical data (in JSON format).
+The schedule message will now update itself automatically every 5 minutes.
 
-Step 3: Find and Copy the file_id
+The button on the welcome message, "بروزرسانی دستی (فقط ادمین)", allows you to force an immediate update without waiting for the 5-minute cycle.
 
-Look inside the JSON data for the video section. You will see a key named "file_id".
+1.4. Private Admin Commands (Your Control Panel)
 
-It will have a long, complicated-looking string of letters, numbers, and symbols as its value.
+You can manage your bot by sending it these commands in a private chat. Only the User IDs listed in your ADMIN_IDS environment variable can use them.
 
-Copy this entire string.
+/status
 
-Step 4: Update Your Bot's Code
+Shows you how many groups the bot is currently active in (i.e., in how many groups /setupgroup has been successfully run).
 
-Open your tennis_bot.py file.
+/stats
 
-Find this line at the top:
+Displays usage statistics, including how many times the schedule has been updated automatically and how many times an admin has manually updated it.
 
-Python
+/broadcast <your message here>
 
-GROUP_VIDEO_FILE_ID = 'YOUR_VIDEO_FILE_ID_HERE'
-* **Replace** `'YOUR_VIDEO_FILE_ID_HERE'` with the `file_id` you just copied. Make sure it stays inside the quotes.
+Sends a message to every active group the bot is a part of. This is perfect for announcements.
 
-Example:
+Example: /broadcast The courts will be closed tomorrow for maintenance.
 
-Python
+Part 2: Regular User Guide
 
-GROUP_VIDEO_FILE_ID = 'BAACAgIAAxkBAAIEAmY1_ABCDEF123456GHIJKLmnOPqrst...'
+2.1. In the Group
 
-**Step 5: Restart and Use!**
-* Save the `tennis_bot.py` file.
-* Stop your bot if it's running (usually by pressing `Ctrl+C` in the terminal) and restart it with `python tennis_bot.py`.
-* Now, when an admin goes to the group and types `/setupgroup`, the bot will post your video with the daily welcome message and buttons attached!
+The bot's main purpose is to provide an always-up-to-date schedule.
+
+The timeslot message automatically refreshes every 5 minutes. You can see the "آخرین آپدیت" time at the top of the message.
+
+There is no need for regular users to do anything. They can simply view the message to see the current status of reservations.
+
+2.2. In a Private Chat
+
+Any user can have a private conversation with the bot for quick checks.
+
+Send the /start command to begin.
+
+The bot will provide two buttons: "امروز" (Today) and "فردا" (Tomorrow) for one-click schedule checks.
+
+You can also manually type a date in the format YYYY-MM-DD (e.g., 2025-10-25) to get the schedule for any specific day.
